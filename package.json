@@ -1,0 +1,28 @@
+{
+  "name": "pi-jev-intent-guard",
+  "version": "0.1.0",
+  "description": "A tiny Pi extension that uses TypeSafe Jev to stop coding agents from taking unrequested side effects.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "jev",
+    "typesafe",
+    "guardrail",
+    "coding-agent",
+    "deepseek",
+    "glm"
+  ],
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "pi": {
+    "extensions": [
+      "./extensions/intent-guard.ts"
+    ]
+  },
+  "scripts": {
+    "test": "node --test test/intent-guard.test.ts"
+  }
+}
