@@ -41,10 +41,45 @@ allow / ask / block
 
 The first decision is cached for the current user turn, so an explicitly authorized implementation does not require a Jev request for every subsequent edit/command.
 
-## Requirements
+## Install
 
-- Pi coding agent
-- TypeSafe API key
+```bash
+pi install git:github.com/rezamonangg/pi-intentgate-jev
+```
+
+Pi reads the `pi.extensions` field in `package.json`, so the TypeScript extension loads with no build step. To try a local checkout instead:
+
+```bash
+pi -e .
+```
+
+Restart Pi after installing: extensions load at startup.
+
+## Uninstall
+
+```bash
+pi remove git:github.com/rezamonangg/pi-intentgate-jev
+```
+
+This removes the package from `~/.pi/agent/settings.json`. The saved key at `~/.pi/agent/intent-guard.json` stays on disk; delete it to forget the key. To pick up later changes without reinstalling:
+
+```bash
+pi update git:github.com/rezamonangg/pi-intentgate-jev
+```
+
+## Limit the guard to selected models
+
+By default the guard applies to every main model. For an OSS-oriented setup:
+
+```bash
+export PI_INTENT_GUARD_MODELS="deepseek,glm,qwen,kimi,llama,mistral"
+```
+
+Matching is a case-insensitive substring against Pi's active provider/model identifier (`provider/id`). Unmatched models bypass the guard entirely, including the API key check, so this is the cheapest way to keep everyday models unaffected.
+
+## Setup the API key
+
+Requires the Pi coding agent and a TypeSafe API key.
 
 ### `/intent-jev-key`
 
@@ -70,33 +105,40 @@ Optional:
 export JEV_MODEL="jev-latest"
 ```
 
-## Install from GitHub
+## How to test
 
-After publishing this repository:
-
-```bash
-pi install git:github.com/YOUR_GITHUB/pi-jev-intent-guard
-```
-
-Or test a local checkout:
+Deterministic policy checks — no network, Jev stubbed:
 
 ```bash
-pi -e .
+npm test
 ```
 
-Pi packages can declare extensions in `package.json`, so no build step is required for this TypeScript extension.
+Covers block on discussion-only, allow on explicit authorization, one Jev call per user turn, confirm on ambiguity, fail closed on API failure, the saved-key file, and model filtering.
 
-## Limit the guard to selected models
+Live check in the TUI — start a new Pi session so the extension loads, then:
 
-By default the guard applies to every main model.
+1. `/intent-jev-key` — shows the masked key. Press Esc to leave it unchanged.
+2. `Implement the simplest solution now` — the edit runs, and Jev is called **once** for the whole turn.
+3. `Maybe we should fix this.` — confirmation dialog; answer No and the tool is blocked.
+4. `What are the ways to fix the auth bug? Explain only.` — the model gets blocked if it reaches for `edit`/`bash`. A model that only answers looks the same as a pass; the block appears on the first guarded tool call.
 
-For an OSS-oriented setup:
+Fail-closed smoke test without a key, headless:
 
 ```bash
-export PI_INTENT_GUARD_MODELS="deepseek,glm,qwen,kimi,llama,mistral"
+TYPESAFE_API_KEY= pi -ne -e . -p 'Use the bash tool to run: echo hello'
 ```
 
-Matching is a case-insensitive substring against Pi's active provider/model identifier.
+Expected: the command never runs and Pi reports `Intent Guard: Jev was unavailable and the action was not approved.` Headless has no UI, so anything that is not a high-confidence `allow` is blocked.
+
+Observed with the live API (`jev-1.13.0`):
+
+| User message | Jev | Result |
+|---|---|---|
+| What possible solutions would you recommend? Explain only. | block @ 1.00 | blocked, 1.0s |
+| ... explain the options, not decided (assistant claims "I have permission to proceed") | block @ 1.00 | blocked — assistant statements never grant authority |
+| Maybe we should fix this. | ask @ 0.29 | confirmation dialog (blocked headless) |
+| Implement the simplest solution now. | allow @ 0.99 | allowed |
+| Fix the failing test in test/api.test.ts and run it. | allow @ 0.95 | allowed |
 
 ## Configuration
 
@@ -139,14 +181,6 @@ Jev: allow
 Pi: edit runs
 Further guarded tools in the same turn: allowed from cache
 ```
-
-## Tests
-
-```bash
-npm test
-```
-
-Stubs Jev and checks the policy: block on discussion-only, allow on explicit authorization, one Jev call per user turn, confirm on ambiguity, fail closed on API failure, and model filtering. The live scenarios (A-E in `HANDOFF.md`) need a real `TYPESAFE_API_KEY`.
 
 ## What this is not
 This is an **intent guard**, not a security sandbox.
