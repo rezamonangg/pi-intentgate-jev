@@ -5,5 +5,8 @@
   "type": "module",
   "keywords": ["pi-package"],
   "pi": { "extensions": ["./index.js"] },
-  "scripts": { "test": "node --test" }
+  "scripts": { "test": "node --test" },
+  "dependencies": {
+    "shell-quote": "^1.12.0"
+  }
 }
