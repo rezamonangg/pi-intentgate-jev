@@ -1,139 +1,38 @@
-# pi-jev-intent-guard
+# pi-intentgate-jev
 
-A tiny Pi extension that asks **TypeSafe Jev one question before side effects**:
+JEV asks before every `bash` or `exec_command` tool call and shows your approval
+history for that exact command in that repo and working directory. It never
+automatically approves a command. Other tools aren't gated; this isn't a sandbox.
 
-> Did the user actually authorize this action?
+Try from this directory:
 
-It is meant for coding models that are useful but sometimes over-execute, including DeepSeek, GLM, Qwen, Kimi, Llama-family models, and others.
-
-## Problem
-
-You ask:
-
-> What solutions did the Oracle subagent suggest?
-
-The main model should discuss the options. Instead, it may start editing files or running commands.
-
-This extension intercepts Pi tool calls before execution and gates:
-
-- `write`
-- `edit`
-- `bash`
-- `powershell`
-
-Read/search/subagent tools are left alone.
-
-## Decision flow
-
-```text
-user prompt
-   |
-main model
-   |
-read/search/subagent --------> allow
-   |
-write/edit/bash/powershell
-   |
-  Jev
-   |
-allow / ask / block
+```sh
+pi --extension ./index.js
 ```
 
-The first decision is cached for the current user turn, so an explicitly authorized implementation does not require a Jev request for every subsequent edit/command.
+For a persistent personal install: `pi install .` then reload Pi.
 
-## Install
+Startup shows “JEV active”. To trigger an approval prompt, ask Pi to run
+`git status`. The history file appears after your first explicit Yes/No answer.
 
-```bash
-pi install git:github.com/rezamonangg/pi-intentgate-jev
-```
+## Learning
 
-Pi reads the `pi.extensions` field in `package.json`, so the TypeScript extension loads with no build step. To try a local checkout instead:
+- One global file: `~/.agent/jev-learning.json`, not inside your repos.
+- Each explicit Yes/No updates its counts. Escape/cancel and non-interactive
+  calls are blocked without recording a vote. No is the default selection.
+- Score: `100 × (yes + 1) / (yes + no + 2)`, rounded. New commands start at 50%.
+  This predicts your approval preference, **not safety or successful execution**.
+- Git roots and working directories use canonical absolute paths. Outside Git,
+  history is grouped by working directory. Exact command text is not generalized;
+  `git status` approval never transfers to `git reset`.
+- Scores are calculated from counts on each ask; counts persist across restarts.
+  Command strings are stored locally and may contain secrets. File permissions
+  are owner-only. Avoid putting secrets directly in commands.
 
-```bash
-pi -e .
-```
+Updates use an exclusive lock directory and atomic file replacement. Corrupt
+history, write failures, or a busy lock block execution rather than erase history.
+After a crash, remove `~/.agent/jev-learning.json.lock` **only after confirming no
+JEV process is writing**. Votes record your answer, not command completion;
+another extension may still deny a command you approved here.
 
-Restart Pi after installing: extensions load at startup.
-
-## Uninstall
-
-```bash
-pi remove git:github.com/rezamonangg/pi-intentgate-jev
-```
-
-This removes the package from `~/.pi/agent/settings.json`. The saved key at `~/.pi/agent/intent-guard.json` stays on disk; delete it to forget the key. To pick up later changes without reinstalling:
-
-```bash
-pi update git:github.com/rezamonangg/pi-intentgate-jev
-```
-
-## Limit the guard to selected models
-
-By default the guard applies to every main model. For an OSS-oriented setup:
-
-```bash
-export PI_INTENT_GUARD_MODELS="deepseek,glm,qwen,kimi,llama,mistral"
-```
-
-Matching is a case-insensitive substring against Pi's active provider/model identifier (`provider/id`). Unmatched models bypass the guard entirely, including the API key check, so this is the cheapest way to keep everyday models unaffected.
-
-## Setup the API key
-
-Requires the Pi coding agent and a TypeSafe API key.
-
-### `/intent-jev-key`
-
-Set the key interactively from Pi:
-
-```text
-/intent-jev-key
-```
-
-The command prompts for the key, saves it to `~/.pi/agent/intent-guard.json` with mode `0600`, activates it for the current session, and validates it against TypeSafe. `PI_CODING_AGENT_DIR` replaces `~/.pi/agent` when set. You can also pass the key as the command argument.
-
-A shell environment variable remains supported:
-
-```bash
-export TYPESAFE_API_KEY="..."   # e.g. in ~/.zshrc
-```
-
-Resolution order is `TYPESAFE_API_KEY` first, then the saved config file. Pi has no `env` block in `settings.json` and does not load `.env` files. Without either key the guard fails closed: it prompts when a UI exists, and blocks when it does not.
-
-Optional:
-
-```bash
-export JEV_MODEL="jev-latest"
-```
-
-## Configuration
-
-```bash
-# tools to guard
-export PI_INTENT_GUARD_TOOLS="bash,powershell,write,edit"
-
-# confidence required for automatic allow/block
-export PI_INTENT_GUARD_CONFIDENCE="0.75"
-
-# max recent-conversation characters sent to Jev
-export PI_INTENT_GUARD_MAX_STATE_CHARS="8000"
-```
-
-### Behavior
-
-- High-confidence `allow` -> execute.
-- High-confidence `block` -> block and tell the model to ask you.
-- `ask` or low confidence -> Pi confirmation dialog.
-- Jev unavailable -> confirmation dialog when UI exists; otherwise fail closed.
-
-## What this is not
-This is an **intent guard**, not a security sandbox.
-
-It does not prove that an authorized command is safe. It only checks whether the user appears to have authorized side effects in the current request.
-
-## Why Jev
-
-Jev returns typed decisions with probabilities/confidence, which makes it appropriate for a small `allow / ask / block` gate rather than asking another general-purpose LLM for prose.
-
-## License
-
-MIT
+Run checks: `npm test`. Start with `index.js` to modify gating or scoring.
